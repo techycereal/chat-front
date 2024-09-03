@@ -12,7 +12,7 @@ function App() {
       <div className="w-full md:w-1/2 flex flex-col items-center md:items-start">
         <h1 className="text-5xl font-bold mb-4">Chat Real-Time</h1>
         <p className="text-xl mb-6">Connecting you to the world wherever you are.</p>
-        <button className="bg-white text-blue-600 px-6 py-3 rounded-lg font-semibold">
+        <button className="bg-white text-blue-600 px-6 py-3 rounded-lg font-semibold" onClick={() => [window.location.pathname = '/login']}>
           Get Started
         </button>
       </div>
