@@ -4,33 +4,6 @@ import { useEffect } from 'react';
 import Lottie from 'lottie-react';
 import chatAnimation from './assets/chat.json'; // Adjust the path if needed
 function App() {
-  useEffect(() => {
-    const auth = getAuth();
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        getProtect(user);
-      } else {
-        console.log('User not logged in');
-      }
-    });
-
-    return () => unsubscribe(); // Clean up the subscription on unmount
-  }, []);
-
-  async function getProtect(user) {
-    try {
-      const token = await user.getIdToken(); // Get the ID token
-      const response = await axios.get('http://localhost:5000/protected', {
-        headers: {
-          Authorization: `Bearer ${token}`, // Include token in Authorization header
-        },
-      });
-
-      console.log(response.data);
-    } catch (error) {
-      console.error('Error fetching protected data:', error);
-    }
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-r from-purple-400 via-pink-500 to-red-500">

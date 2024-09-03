@@ -16,7 +16,7 @@ const AccountSection = () => {
     const fetchUserProfile = async (user) => {
       if (user) {
         try {
-          const response = await axios.get('http://localhost:5000/user-profile', {
+          const response = await axios.get('https://chat-backend-application-20131b482d6c.herokuapp.com/user-profile', {
             headers: {
               Authorization: `Bearer ${await user.getIdToken()}`,
             },

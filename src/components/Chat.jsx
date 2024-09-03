@@ -23,7 +23,7 @@ const Chat = () => {
         setUser(user);
         try {
           const token = await user.getIdToken();
-          const response = await axios.get('http://localhost:5000/my-groups', {
+          const response = await axios.get('https://chat-backend-application-20131b482d6c.herokuapp.com/my-groups', {
             headers: { Authorization: `Bearer ${token}` },
           });
           const { username, groups } = response.data;
@@ -32,7 +32,7 @@ const Chat = () => {
           setGroupList(groups || []);
 
           // Initialize Socket.IO connection
-          socketRef.current = io('http://localhost:5000'); // Adjust the URL if needed
+          socketRef.current = io('https://chat-backend-application-20131b482d6c.herokuapp.com'); // Adjust the URL if needed
 
           // Event listener for when the connection is established
           socketRef.current.on('connect', () => {
@@ -90,7 +90,7 @@ const Chat = () => {
       try {
         const token = await user.getIdToken();
         const response = await axios.post(
-          'http://localhost:5000/create-group',
+          'https://chat-backend-application-20131b482d6c.herokuapp.com/create-group',
           { groupName, username },
           { headers: { Authorization: `Bearer ${token}` } }
         );
@@ -108,7 +108,7 @@ const Chat = () => {
     if (usernameToInvite && group) {
       try {
         const response = await axios.post(
-          'http://localhost:5000/invite-to-group',
+          'https://chat-backend-application-20131b482d6c.herokuapp.com/invite-to-group',
           { usernameToInvite, group, username },
           { headers: { Authorization: `Bearer ${token}` } }
         );
