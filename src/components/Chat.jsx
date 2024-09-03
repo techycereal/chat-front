@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, getDoc, updateDoc, arrayUnion, setDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import axios from 'axios';
+import io from 'socket.io-client';
 
 const Chat = () => {
   const [messages, setMessages] = useState([]);
@@ -12,54 +13,52 @@ const Chat = () => {
   const [invitationUsername, setInvitationUsername] = useState('');
   const [typingUsers, setTypingUsers] = useState([]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const ws = useRef(null);
-  const db = getFirestore();
+  const [user, setUser] = useState(null);
+  const socketRef = useRef(null);
 
   useEffect(() => {
     const auth = getAuth();
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       if (user) {
+        setUser(user);
         try {
-          const userDocRef = doc(db, 'users', user.uid);
-          const userDoc = await getDoc(userDocRef);
-          if (userDoc.exists()) {
-            setUsername(userDoc.data().username || 'Anonymous');
-          } else {
-            console.error('No such user document!');
-          }
+          const token = await user.getIdToken();
+          const response = await axios.get('http://localhost:5000/my-groups', {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          const { username, groups } = response.data;
 
-          const groupsQuery = doc(db, 'users', user.uid);
-          const groupsSnapshot = await getDoc(groupsQuery);
-          if (groupsSnapshot.exists()) {
-            const userGroups = groupsSnapshot.data().groups || [];
-            setGroupList(userGroups);
-          }
+          setUsername(username || 'Anonymous');
+          setGroupList(groups || []);
 
-          // Initialize WebSocket connection
-          ws.current = new WebSocket('ws://localhost:5000');
+          // Initialize Socket.IO connection
+          socketRef.current = io('http://localhost:5000'); // Adjust the URL if needed
 
-          ws.current.onopen = () => {
-            console.log('WebSocket connection established');
+          // Event listener for when the connection is established
+          socketRef.current.on('connect', () => {
             if (selectedGroup) {
-              ws.current.send(JSON.stringify({ action: 'join', group: selectedGroup }));
+              socketRef.current.emit('join', selectedGroup);
             }
-          };
+          });
 
-          ws.current.onmessage = (event) => {
-            const messageData = JSON.parse(event.data);
+          // Event listener for incoming messages
+          socketRef.current.on('message', (messageData) => {
             if (messageData.group === selectedGroup) {
-              if (messageData.action === 'typing') {
-                setTypingUsers((prev) => [...new Set([...prev, messageData.user])]);
-              } else {
-                setMessages((prev) => [...prev, messageData]);
-                setTypingUsers((prev) => prev.filter(user => user !== messageData.user));
-              }
+              setMessages(prev => [...prev, messageData]);
             }
-          };
+          });
 
+          // Event listener for typing status
+          socketRef.current.on('typing', (data) => {
+            if (data.group === selectedGroup) {
+              setTypingUsers(prev => [...new Set([...prev, data.user])]);
+            }
+          });
+
+          // Cleanup function when component unmounts
           return () => {
-            if (ws.current) {
-              ws.current.close();
+            if (socketRef.current) {
+              socketRef.current.disconnect();
             }
           };
         } catch (error) {
@@ -79,20 +78,23 @@ const Chat = () => {
         group: selectedGroup,
         text: `${username}: ${input}`,
       };
-      ws.current.send(JSON.stringify(message));
+      socketRef.current.emit('message', message);
+      setMessages(prev => [...prev, message]); // Add the sent message to the state
       setInput('');
-      setTypingUsers([]); // Clear typing indicator after sending a message
+      setTypingUsers([]);
     }
   };
 
   const createGroup = async () => {
     if (groupName) {
       try {
-        const groupRef = doc(db, 'groups', groupName);
-        await setDoc(groupRef, { members: [username], creator: username });
-        alert('Group created successfully!');
-        const userRef = doc(db, 'users', getAuth().currentUser.uid);
-        await updateDoc(userRef, { groups: arrayUnion(groupName) });
+        const token = await user.getIdToken();
+        const response = await axios.post(
+          'http://localhost:5000/create-group',
+          { groupName, username },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        console.log(response);
         setGroupList((prev) => [...prev, groupName]);
         setGroupName('');
       } catch (error) {
@@ -102,41 +104,33 @@ const Chat = () => {
   };
 
   const inviteToGroup = async (usernameToInvite, group) => {
+    const token = await user.getIdToken();
     if (usernameToInvite && group) {
       try {
-        const usersRef = collection(db, 'users');
-        const q = query(usersRef, where('username', '==', usernameToInvite));
-        const querySnapshot = await getDocs(q);
-        if (!querySnapshot.empty) {
-          const invitationId = `${usernameToInvite}-${username}`;
-          const invitationRef = doc(db, 'invitations', invitationId);
+        const response = await axios.post(
+          'http://localhost:5000/invite-to-group',
+          { usernameToInvite, group, username },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
 
-          const invitationSnapshot = await getDoc(invitationRef);
-
-          if (!invitationSnapshot.exists()) {
-            await setDoc(invitationRef, {
-              group,
-              invitee: usernameToInvite,
-              inviter: username,
-              status: 'pending',
-            });
-            alert('User invited successfully!');
-            setInvitationUsername('');
-          } else {
-            alert('User not found!');
-          }
+        if (response.status === 200) {
+          alert('User invited successfully!');
+          setInvitationUsername('');
+        } else {
+          alert(response.data.message || 'Failed to invite user');
         }
       } catch (error) {
         console.error('Error inviting user:', error.message);
+        alert('Error inviting user');
       }
+    } else {
+      alert('Username and group are required');
     }
   };
 
   const joinGroup = (group) => {
     setSelectedGroup(group);
-    if (ws.current) {
-      ws.current.send(JSON.stringify({ action: 'join', group }));
-    }
+    socketRef.current?.emit('join', group);
   };
 
   const toggleSidebar = () => {
@@ -144,24 +138,25 @@ const Chat = () => {
   };
 
   const handleTyping = () => {
-    if (selectedGroup && ws.current) {
-      ws.current.send(JSON.stringify({ action: 'typing', group: selectedGroup, user: username }));
+    if (selectedGroup && socketRef.current) {
+      socketRef.current.emit('typing', {
+        group: selectedGroup,
+        user: username,
+      });
     }
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-r from-purple-400 via-pink-500 to-red-500">
+    <div className="min-h-screen bg-gradient-to-r from-purple-400 via-pink-500 to-red-500 flex">
       {/* Main Content */}
       <div className="flex-grow p-4">
-        {/* Toggle Button */}
         <button
           onClick={toggleSidebar}
-          className="fixed top-18 right-4 z-10 bg-blue-600 hover:bg-blue-700 text-white p-2 rounded shadow-lg transition"
+          className={`fixed top-17 right-4 z-10 text-white p-1 ${!sidebarOpen && 'bg-gray-600'} rounded shadow-lg transition`}
         >
-          {sidebarOpen ? 'Close Sidebar' : 'Open Sidebar'}
+          {sidebarOpen ? '✖' : '☰'}
         </button>
 
-        {/* Chat Area */}
         <div className="w-full">
           {selectedGroup ? (
             <>
@@ -179,7 +174,7 @@ const Chat = () => {
                   value={input}
                   onChange={(e) => {
                     setInput(e.target.value);
-                    handleTyping(); // Notify others that the user is typing
+                    handleTyping();
                   }}
                   className="flex-grow p-2 border border-gray-600 rounded bg-gray-700 text-white"
                   placeholder="Type your message..."
@@ -200,7 +195,7 @@ const Chat = () => {
 
       {/* Sidebar */}
       <div
-        className={`fixed top-0 right-0 h-full w-64 bg-gray-900 text-white transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}
+        className={`fixed top-18 right-0 h-full w-66 bg-gray-900 text-white transition-transform duration-300 ${sidebarOpen ? 'translate-x-0' : 'translate-x-full'}`}
       >
         <div className="p-4">
           <h2 className="text-lg font-semibold">Groups</h2>
@@ -209,7 +204,7 @@ const Chat = () => {
               <li key={index} className="mt-2">
                 <button
                   onClick={() => joinGroup(group)}
-                  className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
                 >
                   {group}
                 </button>
@@ -218,35 +213,39 @@ const Chat = () => {
           </ul>
           <div className="mt-4">
             <h3 className="text-lg font-semibold">Create Group</h3>
-            <input
-              type="text"
-              value={groupName}
-              onChange={(e) => setGroupName(e.target.value)}
-              className="p-2 border border-gray-600 rounded bg-gray-700 text-white"
-              placeholder="Enter group name"
-            />
-            <button
-              onClick={createGroup}
-              className="ml-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow transition"
-            >
-              Create
-            </button>
+            <div className="flex">
+              <input
+                type="text"
+                value={groupName}
+                onChange={(e) => setGroupName(e.target.value)}
+                className="flex-grow p-2 border border-gray-600 rounded bg-gray-700 text-white"
+                placeholder="Enter group name"
+              />
+              <button
+                onClick={createGroup}
+                className="ml-2 bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded shadow transition"
+              >
+                Create
+              </button>
+            </div>
           </div>
           <div className="mt-4">
             <h3 className="text-lg font-semibold">Invite User</h3>
-            <input
-              type="text"
-              value={invitationUsername}
-              onChange={(e) => setInvitationUsername(e.target.value)}
-              className="p-2 border border-gray-600 rounded bg-gray-700 text-white"
-              placeholder="Enter username"
-            />
-            <button
-              onClick={() => inviteToGroup(invitationUsername, selectedGroup)}
-              className="ml-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded shadow transition"
-            >
-              Invite
-            </button>
+            <div className="flex">
+              <input
+                type="text"
+                value={invitationUsername}
+                onChange={(e) => setInvitationUsername(e.target.value)}
+                className="flex-grow p-2 border border-gray-600 rounded bg-gray-700 text-white"
+                placeholder="Enter username"
+              />
+              <button
+                onClick={() => inviteToGroup(invitationUsername, selectedGroup)}
+                className="ml-2 bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded shadow transition"
+              >
+                Invite
+              </button> 
+            </div>
           </div>
         </div>
       </div>

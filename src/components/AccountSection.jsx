@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { getAuth, updateProfile, updateEmail, reauthenticateWithCredential, EmailAuthProvider, onAuthStateChanged } from 'firebase/auth';
 import { getFirestore, doc, updateDoc, getDoc, query, where, collection, getDocs } from 'firebase/firestore';
-
+import axios from 'axios';
 const AccountSection = () => {
   const auth = getAuth();
   const db = getFirestore();
@@ -16,24 +16,19 @@ const AccountSection = () => {
     const fetchUserProfile = async (user) => {
       if (user) {
         try {
-          const userDocRef = doc(db, 'users', user.uid);
-          const userDoc = await getDoc(userDocRef);
-          if (userDoc.exists()) {
-            const userData = userDoc.data();
-            setUsername(userData.username || '');
+          const response = await axios.get('http://localhost:5000/user-profile', {
+            headers: {
+              Authorization: `Bearer ${await user.getIdToken()}`,
+            },
+          });
 
-            const invitationsQuery = query(
-              collection(db, 'invitations'),
-              where('invitee', '==', userData.username),
-              where('status', '==', 'pending')
-            );
-            const invitationSnapshot = await getDocs(invitationsQuery);
-            const fetchedInvitations = invitationSnapshot.docs.map(doc => ({
-              id: doc.id,
-              ...doc.data()
-            }));
-
-            setInvitations(fetchedInvitations);
+          if (response.status === 200) {
+            const { username, invitations } = response.data;
+            setUsername(username || '');
+            setInvitations(invitations || []);
+            console.log(invitations);
+          } else {
+            console.error('Failed to fetch user profile');
           }
         } catch (error) {
           console.error('Error fetching user profile:', error.message);
