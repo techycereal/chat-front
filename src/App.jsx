@@ -1,6 +1,3 @@
-import axios from 'axios';
-import { getAuth, onAuthStateChanged } from 'firebase/auth';
-import { useEffect } from 'react';
 import Lottie from 'lottie-react';
 import chatAnimation from './assets/chat.json'; // Adjust the path if needed
 function App() {
