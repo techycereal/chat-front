@@ -1,5 +1,4 @@
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
-import { setDoc, doc } from 'firebase/firestore';
 import { auth, db } from './firebaseConfig'; // Ensure you have a firebaseConfig file
 import axios from 'axios';
 export const signUp = async (email, password, username) => {
