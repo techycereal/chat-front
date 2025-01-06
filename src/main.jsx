@@ -8,6 +8,8 @@ import AuthComponent from './components/AuthForm.jsx';
 import Chat from './components/Chat.jsx';
 import AccountSection from './components/AccountSection.jsx';
 import { logout } from './authService.js';
+import SignInPage from './components/SignInPage.jsx';
+import SignUpPage from './components/SignUpPage.jsx';
 const Main = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(false);
   const auth = getAuth();
@@ -61,18 +63,27 @@ const Main = () => {
             </p>
             </>
           ) : (
+            <>
             <p 
               onClick={() => window.location.pathname = '/login'}
               className="cursor-pointer hover:bg-gray-800 p-2 rounded transition"
             >
               Login
             </p>
+            <p 
+              onClick={() => window.location.pathname = '/signup'}
+              className="cursor-pointer hover:bg-gray-800 p-2 rounded transition"
+            >
+              Sign Up
+            </p>
+            </>
           )}
         </div>
       </div>
       <Routes>
         <Route path="/" element={<App />} />
-        <Route path="/login" element={<AuthComponent />} />
+        <Route path="/login" element={<SignInPage />} />
+        <Route path="/signup" element={<SignUpPage />} />
         <Route path="/chat" element={<Chat />} />
         <Route path="/account" element={<AccountSection />} />
       </Routes>
